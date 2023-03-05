@@ -5,6 +5,8 @@ interface Term
         , with
         , indent
         , cyan, yellow, red
+        
+        , init, update
         , format, print
         ]
     imports 
@@ -91,10 +93,13 @@ print = \terms ->
 format : List Term -> Str
 format = \terms ->
     postProcess terms
+        |> .term
         |> formatTerm
 
 
-postProcess : List Term -> Term
+Processed : { term : Term, cursor : ReplacementCursor }
+
+postProcess : List Term -> Processed
 postProcess = \terms ->
     term = Layout Column [] terms
 
@@ -104,10 +109,11 @@ postProcess = \terms ->
             , lines : (Dict.empty {})
             }
             term
-    
+
+        
     term 
         |> replaceWidths { rowIndex : 0, widths : lineIndexToWidths.lines }
-        |> .term
+        
 
 
 
@@ -117,9 +123,17 @@ ReplacementCursor: {
     rowIndex : Nat
 }
 
-replaceWidths : Term, ReplacementCursor-> { term : Term, cursor : ReplacementCursor }
+termHeight : Term -> Nat
+termHeight = \term ->
+    when term is
+        Text _ _ -> 1
+        Fill _ _ _ -> 1
+        Layout Row _ _ -> 1
+        Layout Column _ _ -> 0
+
+replaceWidths : Term, ReplacementCursor -> { term : Term, cursor : ReplacementCursor }
 replaceWidths = \term, cursor ->
-     when term is
+    when term is
         Text _ _ -> 
             { term : term, cursor : cursor }
 
@@ -167,15 +181,13 @@ replaceWidths = \term, cursor ->
                             replaced = replaceWidths colTerm innerCursor.cursor
                             replacedCursor = replaced.cursor
                             
-                            
                             { cursor :
                                 { replacedCursor 
-                                    & rowIndex : replacedCursor.rowIndex + 1,
+                                    & rowIndex : replacedCursor.rowIndex + termHeight colTerm,
                                 },
                               items : List.append innerCursor.items replaced.term
                             }
-                        )
-
+                         )
             { term : Layout Column attrs newContents.items
             , cursor : newContents.cursor
             }
@@ -233,7 +245,6 @@ getLineIndexToWidths = \cursor, term ->
         Layout Column attrs rows ->
             currentWithIndentation = gatherAttrIndentation cursor.current attrs
 
-
             # This is multiple lines
             rows
                 |> List.walk { cursor & current : currentWithIndentation }
@@ -243,8 +254,8 @@ getLineIndexToWidths = \cursor, term ->
                         lineInfo = getLineIndexToWidths 
                             innerCursor
                             colTerm
-
-                        lineInnerCursor = lineInfo.current                      
+                      
+                        lineInnerCursor = lineInfo.current
                         
                         # This is a new line
                         # At this point we have enough information to 'commit' information about this line and clear the cursor
@@ -380,38 +391,57 @@ red =
 ## ANIMATION
 
 Animated := {
-    previous: Term,
-    current: Term
+    previous: Processed ,
+    current: Processed
 }
+
+emptyProcessed : Processed
+emptyProcessed =
+    { term :  Layout Column [] [],
+      cursor : 
+        { widths : Dict.empty {},
+          rowIndex : 0
+        }
+    }
 
 ## Generate the ansi codes necessary to clear the given term.
 init : Animated
 init =
     @Animated 
-        { previous : Layout Column [] [],
-          current : Layout Column [] [],
+        { previous : emptyProcessed,
+          current : emptyProcessed
         }
 
 ## Generate the ansi codes necessary to clear the given term.
-clear : Term -> Str
-clear = \term ->
-    ""
+clear : Processed -> Str
+clear = \processed ->
+    rowIndex =
+        if processed.cursor.rowIndex < 3 then 
+            processed.cursor.rowIndex
+        else 
+            processed.cursor.rowIndex 
+
+    # dbg "CLEARING"
+    # dbg processed.cursor.rowIndex
+
+    Term.Unicode.clearLinesAboveBase rowIndex
+    # skipping = Num.toStr rowIndex
+    # "-> ERASING \(skipping)\n"
 
 
-update : Animated, List Tsrm -> Task Animated *
+update : Animated, List Term -> Task Animated *
 update = \@Animated anim, newTerms ->
-    newTerm = postProcess newTerms
-
+    processed = postProcess newTerms
     Stdout.line
         (Str.concat 
-            (clear anim.previous)
-            (formatTerm newTerm)
+            (clear anim.current)
+            (formatTerm processed.term)
         )
         |> Task.map 
             (\{} ->
                 @Animated
                     { previous : anim.current,
-                      current : newTerm
+                      current : processed
                     }
             )
 
