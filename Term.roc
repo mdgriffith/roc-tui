@@ -5,14 +5,11 @@ interface Term
         , with
         , indent
         , cyan, yellow, red
-        
         , init, update
-        , format, print
+        , format, clear, formatAnimated
         ]
     imports 
-        [ pf.Stdout
-        , pf.Task.{ Task }
-        , Term.Unicode
+        [ Term.Unicode
         ]
 
 
@@ -84,17 +81,18 @@ lines = \attrs, children ->
 
 
 
-print : List Term -> Task {} *
-print = \terms ->
-    format terms
-        |> Stdout.line
-
-
 format : List Term -> Str
 format = \terms ->
-    postProcess terms
-        |> .term
-        |> formatTerm
+    posted = postProcess terms
+    formatted = formatTerm posted.term
+   
+    # dbg formatted
+    # dbg (formatted |> Str.split "\n" |> List.len)
+    # dbg posted.cursor.lineIndex
+    formatted
+
+
+    
 
 
 Processed : { term : Term, cursor : ReplacementCursor }
@@ -111,8 +109,7 @@ postProcess = \terms ->
             term
 
         
-    term 
-        |> replaceWidths { rowIndex : 0, widths : lineIndexToWidths.lines }
+    term |> replaceWidths { lineIndex : 0, widths : lineIndexToWidths.lines }
         
 
 
@@ -120,7 +117,7 @@ postProcess = \terms ->
 
 ReplacementCursor: {
     widths : Dict Nat WidthCalc,
-    rowIndex : Nat
+    lineIndex : Nat
 }
 
 termHeight : Term -> Nat
@@ -138,13 +135,15 @@ replaceWidths = \term, cursor ->
             { term : term, cursor : cursor }
 
         Fill portion attrs str ->
-            when Dict.get cursor.widths cursor.rowIndex is
+            when Dict.get cursor.widths cursor.lineIndex is
                 Err _ ->
+                    dbg "ERROR"
                     { term : term, cursor : cursor }
 
                 Ok width ->
                     portionSize = 
                         getPortionSize width
+
                     newTerm = Fill (portion * portionSize) attrs str
                     { term : newTerm, cursor : cursor }
 
@@ -183,7 +182,7 @@ replaceWidths = \term, cursor ->
                             
                             { cursor :
                                 { replacedCursor 
-                                    & rowIndex : replacedCursor.rowIndex + termHeight colTerm,
+                                    & lineIndex : replacedCursor.lineIndex + termHeight colTerm,
                                 },
                               items : List.append innerCursor.items replaced.term
                             }
@@ -263,7 +262,7 @@ getLineIndexToWidths = \cursor, term ->
                             # Note, we are updating the innerCursor
                             # This is because any "indent" it already has will apply to future rows.
                             { innerCursorCurrent 
-                                & index : lineInnerCursor.index + 1,
+                                & index : lineInnerCursor.index + termHeight colTerm,
                             },
                           lines : 
                             lineInfo.lines
@@ -285,8 +284,7 @@ emptyWidthCalc =
 
 getPortionSize : WidthCalc -> Nat
 getPortionSize = \calc ->
-    remainingChars = totalWidth - calc.usedChars
-    
+    remainingChars = totalWidth - calc.usedChars    
     Num.divTrunc remainingChars calc.portions
 
 
@@ -395,12 +393,16 @@ Animated := {
     current: Processed
 }
 
+lineCount : Processed -> Nat
+lineCount = \{ cursor } ->
+    cursor.lineIndex
+
 emptyProcessed : Processed
 emptyProcessed =
     { term :  Layout Column [] [],
       cursor : 
         { widths : Dict.empty {},
-          rowIndex : 0
+          lineIndex : 0
         }
     }
 
@@ -412,37 +414,22 @@ init =
           current : emptyProcessed
         }
 
+
+formatAnimated : Animated -> Str
+formatAnimated = \@Animated {current} ->
+    format [ current.term ]
+
 ## Generate the ansi codes necessary to clear the given term.
-clear : Processed -> Str
-clear = \processed ->
-    rowIndex =
-        if processed.cursor.rowIndex < 3 then 
-            processed.cursor.rowIndex
-        else 
-            processed.cursor.rowIndex 
-
-    # dbg "CLEARING"
-    # dbg processed.cursor.rowIndex
-
-    Term.Unicode.clearLinesAboveBase rowIndex
-    # skipping = Num.toStr rowIndex
-    # "-> ERASING \(skipping)\n"
+clear : Animated -> Str
+clear = \@Animated {current} ->
+    Term.Unicode.clearLinesAboveBase (lineCount current)
 
 
-update : Animated, List Term -> Task Animated *
+update : Animated, List Term -> Animated
 update = \@Animated anim, newTerms ->
     processed = postProcess newTerms
-    Stdout.line
-        (Str.concat 
-            (clear anim.current)
-            (formatTerm processed.term)
-        )
-        |> Task.map 
-            (\{} ->
-                @Animated
-                    { previous : anim.current,
-                      current : processed
-                    }
-            )
-
+    @Animated
+        { previous : anim.current,
+            current : processed
+        }
 

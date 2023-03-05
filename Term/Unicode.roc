@@ -5,9 +5,7 @@ interface Term.Unicode
           dash, longDash,
           clearLinesAboveBase
         ]
-    imports 
-        [
-        ]
+    imports []
 
 #  ANSI code reference!
 #  https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
@@ -30,7 +28,7 @@ color255 = \colorCode ->
 
 reset : Str
 reset = 
-    Str.concat esc "[0m"
+    command "0m"
 
 cyan : Str
 cyan =
@@ -79,18 +77,21 @@ moveDownLines = \count ->
 
 
 
-toPreviousLineStart : Str
-toPreviousLineStart =
-    command (Str.concat "1" "F")
+toPreviousLineStart : Nat -> Str
+toPreviousLineStart = \count ->
+    command (Str.concat (Num.toStr count) "F")
 
-toNextLineStart : Str
-toNextLineStart =
-    command (Str.concat "1" "E")
+
+
+toNextLineStart : Nat -> Str
+toNextLineStart = \count ->
+    command (Str.concat (Num.toStr count) "E")
+
 
 
 toLastLineStart : Str
 toLastLineStart =
-    command (Str.concat "100" "E")
+    command (Str.concat "2000" "E")
 
 
 # Cursor State
@@ -106,27 +107,30 @@ restoreCursorPosition =
 
 # Edits
 
+
+
+
 clearLinesAboveBase : Nat -> Str
 clearLinesAboveBase = \lineCount ->
     Str.joinWith 
-        [ saveCursorPosition
-        , toLastLineStart
-        , (Str.repeat 
-            (Str.concat toPreviousLineStart clearLine) lineCount
-          )
-        , restoreCursorPosition
+        [ toLastLineStart
+        , Str.repeat
+            (Str.concat
+                (moveUpLines 1)
+                clearLine
+            )
+            lineCount
+         
         ]
         ""
-    # toPreviousLine
-#    Str.repeat (Str.concat toPreviousLineStart "--->") lineCount
-    # if lineCount == 0 then 
-    #     ""
-    # else 
-    #     Str.concat toPreviousLineStart clearLine
 
 
-
+clearToBottomOfScreen : Str
+clearToBottomOfScreen =
+    command "0J"
 
 clearLine : Str
 clearLine =
-    command "2K"
+    Str.concat 
+        (command "2K")
+        "\r"
