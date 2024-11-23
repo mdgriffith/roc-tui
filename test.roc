@@ -3,18 +3,14 @@ app "tui"
     imports [pf.Stdin, pf.Stdout, pf.Task.{ Task }, Term, Term.Unicode]
     provides [main] to pf
 
-twoLines =
-    [  Term.lines [ Term.indent 3 ] 
-        [ Term.text " Welcome to Roc Terminal UI! ",
-          Term.text " Welcome to Roc Terminal UI! "
-        ]
-    
 
-    ]
-
-bigboi =
+exampleStuff =
     [ Term.empty
     , Term.empty
+    , Term.empty
+    , Term.empty
+    , Term.text "Hello!!!"
+        |> Term.with [ Term.yellow ]
     , Term.row [ Term.yellow ]
         [ Term.text "──"
         , Term.text " Welcome to Roc Terminal UI! "
@@ -43,26 +39,69 @@ bigboi =
                 ]
             ]
         ]
-    , Term.empty
-    , Term.fill "─"
-    , Term.text "Hello!!!!!!"
-        |> Term.with [ Term.indent 5, Term.red ]
-    , Term.empty
-    , Term.empty
+    # , Term.empty
+    # , Term.fill "─"
+    # , Term.text "Hello!!!!!!"
+    #     |> Term.with [ Term.indent 5, Term.red ]
     ]
 
+
+largeBlock =
+    [ Term.empty
+    , Term.text "two"
+    , Term.text "three"
+    , Term.text "four"
+    , Term.text "five"
+    , Term.text "one"
+    , Term.lines [ Term.yellow, Term.indent 5 ] 
+        [ Term.row [ Term.cyan ]
+            [ Term.text "Intro to Terminal UI"
+            , Term.fill "."
+            , Term.text "Page 5"
+                |> Term.with [ Term.red ]
+            ]
+        , Term.text "two"
+        , Term.text "three"
+        , Term.text "four"
+        , Term.text "five"
+        ]
+    , Term.text "one"
+    , Term.text "two"
+    , Term.text "three"
+    , Term.text "four"
+    , Term.text "five"
+    , Term.fill "-"
+    ]
+
+
+
+print = \terms ->
+    Stdout.write (Term.format terms)
+
+printAnim = \terms ->
+    Stdout.line (Term.formatAnimated terms)
+
+
+runClear = \anim ->
+    Stdout.write (Term.clear anim)
+
+
+
 main =
-    _ <- Task.await (Term.print [Term.text "STARTINNNG"])
-    _ <- Task.await (Term.print [Term.text "STARTINNNG222"])
-    anim = Term.init
+ 
+    anim = Term.init   
+    nextAnim = Term.update anim exampleStuff
+    _ <- Task.await (printAnim nextAnim)
 
-    # _ <- Term.print bigboi
-    #         |> Task.await
 
-    # Term.print [ Term.text "OTHER STUFF" ]
-    newAnim <- Task.await (Term.update anim twoLines)
-    # newAnim2 <- Task.await (Term.update newAnim bigboi)
-    _ <- Task.await (Term.update newAnim [ Term.text "PLS2" ])
+
+    _ <- Task.await (runClear nextAnim)
+    largeBlockAnim = Term.update nextAnim largeBlock
+    _ <- Task.await (printAnim largeBlockAnim)
+ 
+
 
 
     Task.succeed {}
+
+
